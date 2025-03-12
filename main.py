@@ -33,7 +33,10 @@ async def search_anime(query):
     description = soup.find("p", itemprop="description").text
     clean_text = re.sub(r"\[.*?\]", "", description).strip()
     studio = soup.find("span", class_ = "information studio author").text
+    episodes_tag = soup.find("span", class_="dark_text", string="Episodes:")
+    episodes = episodes_tag.parent.text.replace("Episodes:", "").strip() if episodes_tag else "Unknown"
     img_tag = soup.find("img", alt = title)
+    #
 
     if img_tag:
         img_url = img_tag.get("data-src")
@@ -42,22 +45,22 @@ async def search_anime(query):
             with open("anime_poster.jpg", "wb") as f:
                 f.write(img_data)
 
-    return [img_url, title, clean_text, studio, link,]
+    return [img_url, title, clean_text, studio, link, episodes,]
 
 @dp.message(F.text & ~F.text.startswith("/") & ~F.text.in_(["🇬🇧 English", "🇺🇦 Українська"]))
 async def anime_name(message:Message):
     query = message.text
     try:
-        img_url, title, clean_text, studio, link, = await search_anime(query)
+        img_url, title, clean_text, studio, link, episodes, = await search_anime(query)
     except:
         anime_doesnt_found = await search_anime(query)
         await message.answer(text=anime_doesnt_found)
 
     if img_url:
-        await bot.send_photo(chat_id=message.chat.id, photo=img_url, caption=f'<b>Title</b>: {title}\n<b>Studio</b>: {studio}\n<b>Episodes</b>: ...', parse_mode='HTML')
+        await bot.send_photo(chat_id=message.chat.id, photo=img_url, caption=f'<b>Title</b>: {title}\n<b>Studio</b>: {studio}\n<b>Episodes</b>: {episodes}', parse_mode='HTML')
         await message.answer(text=f'<b>Full description</b>: {clean_text}', parse_mode="HTML")
     else:
-        await message.answer(text=f"<b>Title:</b> {title}\n\n<b>Description:</b> {clean_text}\n\n<b>Studio:</b> {studio}\n\n {link}", parse_mode="HTML")
+        await message.answer(text=f"<b>Title:</b> {title}\n\n<b>Description:</b> {clean_text}\n\n<b>Studio:</b> {studio}\n<b>Episodes</b>: {episodes} \n\n {link}", parse_mode="HTML")
 
 async def main():
     await dp.start_polling(bot)
