@@ -36,7 +36,20 @@ async def search_anime(query):
     episodes_tag = soup.find("span", class_="dark_text", string="Episodes:")
     episodes = episodes_tag.parent.text.replace("Episodes:", "").strip() if episodes_tag else "Unknown"
     img_tag = soup.find("img", alt = title)
-    #
+
+    another_search_url = f"https://9animetv.to/search?keyword={query.replace(' ', '+')}"
+    response = requests.get(another_search_url, headers=headers)
+    soup = bs(response.text, "html.parser")
+    anime_links = soup.find_all("a", class_="film-poster-ahref")
+
+    for i, link in enumerate(anime_links):
+        film_name = soup.find_all("h3", class_="film-name")
+        title = (film_name[i].find('a').text.strip())
+        anime_url = link["href"]
+
+        if title.lower() == query.lower():
+            another_link = f"https://9animetv.to{anime_url}"
+            break
 
     if img_tag:
         img_url = img_tag.get("data-src")
@@ -45,13 +58,13 @@ async def search_anime(query):
             with open("anime_poster.jpg", "wb") as f:
                 f.write(img_data)
 
-    return [img_url, title, clean_text, studio, link, episodes,]
+    return [img_url, title, clean_text, studio, link, episodes,another_link,]
 
 @dp.message(F.text & ~F.text.startswith("/") & ~F.text.in_(["🇬🇧 English", "🇺🇦 Українська"]))
 async def anime_name(message:Message):
     query = message.text
     try:
-        img_url, title, clean_text, studio, link, episodes, = await search_anime(query)
+        img_url, title, clean_text, studio, link, episodes, another_link, = await search_anime(query)
     except:
         anime_doesnt_found = await search_anime(query)
         await message.answer(text=anime_doesnt_found)
@@ -59,8 +72,10 @@ async def anime_name(message:Message):
     if img_url:
         await bot.send_photo(chat_id=message.chat.id, photo=img_url, caption=f'<b>Title</b>: {title}\n<b>Studio</b>: {studio}\n<b>Episodes</b>: {episodes}', parse_mode='HTML')
         await message.answer(text=f'<b>Full description</b>: {clean_text}', parse_mode="HTML")
+        await message.answer(text=f'<b>You can see it here</b>: {another_link}',  parse_mode="HTML")
     else:
         await message.answer(text=f"<b>Title:</b> {title}\n\n<b>Description:</b> {clean_text}\n\n<b>Studio:</b> {studio}\n<b>Episodes</b>: {episodes} \n\n {link}", parse_mode="HTML")
+        await message.answer(text=f'<b>You can see it here</b>: {another_link}', parse_mode="HTML")
 
 async def main():
     await dp.start_polling(bot)
