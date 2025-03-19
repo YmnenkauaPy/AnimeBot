@@ -5,6 +5,8 @@ from typing import Final
 from aiogram.fsm.storage.memory import MemoryStorage
 import requests
 from bs4 import BeautifulSoup as bs
+from thefuzz import fuzz
+from thefuzz import process
 
 import commands
 
@@ -41,15 +43,15 @@ async def search_anime(query):
     response = requests.get(another_search_url, headers=headers)
     soup = bs(response.text, "html.parser")
     anime_links = soup.find_all("a", class_="film-poster-ahref")
+    film_names = soup.find_all("h3", class_="film-name")
+    titles = [name.find('a').text.strip() for name in film_names]
+    title_to_url = {titles[i]: anime_links[i]["href"] for i in range(len(anime_links))}
 
-    for i, link in enumerate(anime_links):
-        film_name = soup.find_all("h3", class_="film-name")
-        title = (film_name[i].find('a').text.strip())
-        anime_url = link["href"]
+    best_match, score = process.extractOne(query, titles, scorer=fuzz.token_sort_ratio)
 
-        if title.lower() == query.lower():
-            another_link = f"https://9animetv.to{anime_url}"
-            break
+    if score >= 70:
+        another_link = f"https://9animetv.to{title_to_url[best_match]}"
+        print(f"Found: {best_match} (coincidence: {score}%)")
 
     if img_tag:
         img_url = img_tag.get("data-src")
