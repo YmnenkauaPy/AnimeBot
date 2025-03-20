@@ -47,11 +47,23 @@ async def search_anime(query):
     titles = [name.find('a').text.strip() for name in film_names]
     title_to_url = {titles[i]: anime_links[i]["href"] for i in range(len(anime_links))}
 
-    best_match, score = process.extractOne(query, titles, scorer=fuzz.token_sort_ratio)
+    query_parts = query.split()
+    season_number = next((int(part) for part in query_parts if part.isdigit()), None)
+
+    best_match, score = process.extractOne(query, titles, scorer=fuzz.partial_ratio)
+
+    if season_number:
+        for title in titles:
+            if f"season {season_number}" in title.lower():
+                best_match = title
+                score += 15  # Даём дополнительный приоритет сезону
+                break
 
     if score >= 70:
         another_link = f"https://9animetv.to{title_to_url[best_match]}"
         print(f"Found: {best_match} (coincidence: {score}%)")
+    else:
+        another_link = None
 
     if img_tag:
         img_url = img_tag.get("data-src")
