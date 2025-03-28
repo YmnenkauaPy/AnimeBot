@@ -83,23 +83,25 @@ async def search_anime_info(query):
             if not res:
                 similar_titles.append(i)
 
-    similar_titles.remove('')
-    best_score = 0
+    try:
+        similar_titles.remove('')
+    except:
+        pass
+
+    titles = []
+    options = []
     for title in similar_titles:
         card = article.find('a', class_="hoverinfo_trigger", string = title)
         link = card["href"]
         soup = bs((requests.get(link, headers=headers)).text, 'html.parser')
         english_tag = soup.find("span", class_="dark_text", string="English:")
         english_name = english_tag.parent.text.replace("English:", "").strip() if english_tag else "Unknown"
+        options.append(english_name.lower())
+        titles.append(title)
 
-        if english_name != 'Unknown':
-            score = fuzz.partial_ratio(english_name.lower(), query.lower())
-            if score >= 70 and score > best_score:
-                best_score = score
-                best_match = english_name
-                best_title = title
-            else:
-                continue
+    match, score = process.extractOne(query, options, scorer=fuzz.ratio)
+    best_match = match
+    best_title = titles[options.index(match)]
 
     card = article.find('a', class_="hoverinfo_trigger", string = best_title)
     link = card["href"]
@@ -107,6 +109,7 @@ async def search_anime_info(query):
     description = soup.find("p", itemprop="description").text
     clean_text = re.sub(r"\[.*?\]", "", description).strip()
     studio = soup.find("span", class_ = "information studio author").text
+    studio = " ".join(studio.split())
     episodes_tag = soup.find("span", class_="dark_text", string="Episodes:")
     episodes = episodes_tag.parent.text.replace("Episodes:", "").strip() if episodes_tag else "Unknown"
 
@@ -124,8 +127,8 @@ async def search_anime_info(query):
 
     return [img_url, best_title, clean_text, studio, episodes, another_link,]
 
-@dp.message(F.text & ~F.text.startswith("/") & ~F.text.in_(["🇬🇧 English", "🇺🇦 Українська"]))
 
+@dp.message(F.text & ~F.text.startswith("/") & ~F.text.in_(["🇬🇧 English", "🇺🇦 Українська"]))
 async def anime_name(message:Message):
     query = message.text
     try:
