@@ -18,7 +18,7 @@ dp.include_router(commands.router)
 
 headers = {"User-Agent": "Mozilla/5.0"}
 
-async def search_anime_link(another_search_url, english_name):
+async def search_anime_link(another_search_url, english_name, season):
     response = requests.get(another_search_url, headers=headers)
     soup = bs(response.text, "html.parser")
     anime_links = soup.find_all("a", class_="film-poster-ahref")
@@ -26,28 +26,23 @@ async def search_anime_link(another_search_url, english_name):
     titles = [name.find('a').text.strip() for name in film_names]
     title_to_url = {titles[i]: anime_links[i]["href"] for i in range(len(anime_links))}
 
-    query_parts = english_name.split()
-    season_number = next((int(part) for part in query_parts if part.isdigit()), None)
-    best_score = 0
-    for title in titles:
-        if english_name.lower() == title.lower():
-            best_match = title
-            best_score = 100
-            break
-    else:
-        match, score = process.extractOne(english_name, titles, scorer=fuzz.partial_ratio)
-        if score > best_score:
-            best_match, best_score = match, score
+    similar_titles = []
+    for i in titles:
+        if i.lower == english_name:
+            return f"https://9animetv.to{title_to_url[i]}"
 
-    if season_number:
-        for title in titles:
-            if f"season {season_number}" in title.lower():
-                best_match = title
-                best_score += 15
-                break
+        if season:
+            if season in i:
+                similar_titles.append(i)
 
-    if best_match and best_score >= 70:
-        return f"https://9animetv.to{title_to_url[best_match]}"
+        else:
+            res = any(char.isdigit() for char in i)
+            if not res and i:
+                similar_titles.append(i)
+
+    match, score = process.extractOne(english_name, similar_titles, scorer=fuzz.ratio)
+
+    return f"https://9animetv.to{title_to_url[match]}"
 
 async def search_anime_info(query):
     search_url = f"https://myanimelist.net/search/all?q={query.replace(' ', '+')}"
@@ -63,8 +58,7 @@ async def search_anime_info(query):
     if not anime_cards:
         return "Anime haven't been found"
 
-    title_to_url = {card.text.strip(): card["href"] for card in anime_cards}
-    titles = list(title_to_url.keys())
+    titles = [card.text.strip() for card in anime_cards]
     query_parts = query.split()
     for i in query_parts:
         if i.isdigit():
@@ -73,35 +67,41 @@ async def search_anime_info(query):
         season = None
 
     similar_titles = []
+    best_title = ''
     for i in titles:
+        if i.lower() == query.lower():
+            best_title = i
+            break
         if season:
             if season in i:
                 similar_titles.append(i)
 
         else:
             res = any(char.isdigit() for char in i)
-            if not res:
+            if not res and i:
                 similar_titles.append(i)
-
-    try:
-        similar_titles.remove('')
-    except:
-        pass
 
     titles = []
     options = []
-    for title in similar_titles:
-        card = article.find('a', class_="hoverinfo_trigger", string = title)
+    if not best_title:
+        for title in similar_titles:
+            card = article.find('a', class_="hoverinfo_trigger", string = title)
+            link = card["href"]
+            soup = bs((requests.get(link, headers=headers)).text, 'html.parser')
+            english_tag = soup.find("span", class_="dark_text", string="English:")
+            english_name = english_tag.parent.text.replace("English:", "").strip() if english_tag else "Unknown"
+            options.append(english_name.lower())
+            titles.append(title)
+
+        best_match, score = process.extractOne(query, options, scorer=fuzz.ratio)
+        best_title = titles[options.index(best_match.lower())]
+    else:
+        card = article.find('a', class_="hoverinfo_trigger", string = best_title)
         link = card["href"]
         soup = bs((requests.get(link, headers=headers)).text, 'html.parser')
         english_tag = soup.find("span", class_="dark_text", string="English:")
-        english_name = english_tag.parent.text.replace("English:", "").strip() if english_tag else "Unknown"
-        options.append(english_name.lower())
-        titles.append(title)
+        best_match = english_tag.parent.text.replace("English:", "").strip() if english_tag else "Unknown"
 
-    match, score = process.extractOne(query, options, scorer=fuzz.ratio)
-    best_match = match
-    best_title = titles[options.index(match)]
 
     card = article.find('a', class_="hoverinfo_trigger", string = best_title)
     link = card["href"]
@@ -116,7 +116,7 @@ async def search_anime_info(query):
     img_tag = soup.find("img", alt = best_title)
 
     another_search_url = f"https://9animetv.to/search?keyword={best_match.replace(' ', '+')}"
-    another_link = await search_anime_link(another_search_url, best_match.lower())
+    another_link = await search_anime_link(another_search_url, best_match.lower(), season)
 
     if img_tag:
         img_url = img_tag.get("data-src")
